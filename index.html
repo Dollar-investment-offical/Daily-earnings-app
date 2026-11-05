@@ -614,35 +614,37 @@ if (!timeEl) return;
 timeEl.innerText = new Date().toLocaleTimeString();
 }
 
-// Backward Compatible Session Storage Loader
+// User Session Logic with strict New Device Isolation
 function initUserSession() {
-const storageKeys = [
-'earn_crypto_user_data_v4',
-'earn_crypto_user_data_v3',
-'earn_crypto_user_data_v2',
-'earn_crypto_user_data'
-];
-let loadedData = null;
-for (let key of storageKeys) {
-const saved = localStorage.getItem(key);
+const urlParams = new URLSearchParams(window.location.search);
+const refCode = urlParams.get('ref');
+
+// Check existing user profile
+const savedUserId = localStorage.getItem('current_app_user_id');
+
+if (!savedUserId) {
+// Fresh New User on this device/browser
+const newUserId = 'USER' + Math.floor(100000 + Math.random() * 900000);
+localStorage.setItem('current_app_user_id', newUserId);
+userData.userId = newUserId;
+userData.balance = 0.00;
+userData.referralEarnings = 0.00;
+userData.referralsCount = 0;
+userData.activityLogs = [];
+userData.referredFriends = [];
+saveUserData();
+} else {
+// Load existing user profile on this device
+const saved = localStorage.getItem('user_profile_' + savedUserId);
 if (saved) {
 try {
-loadedData = JSON.parse(saved);
-break;
-} catch (e) {}
+const loaded = JSON.parse(saved);
+userData = { ...userData, ...loaded };
+} catch(e) {}
+} else {
+userData.userId = savedUserId;
 }
 }
-if (loadedData) {
-userData = {
-...userData,
-...loadedData,
-adCooldowns: { ...userData.adCooldowns, ...(loadedData.adCooldowns || {}) }
-};
-}
-if (!userData.userId) {
-userData.userId = 'USER' + Math.floor(100000 + Math.random() * 900000);
-}
-saveUserData();
 
 const cleanUrl = window.location.origin + window.location.pathname;
 const fullRefLink = cleanUrl + "?ref=" + userData.userId;
@@ -651,7 +653,7 @@ if (refInput) {
 refInput.value = fullRefLink;
 }
 
-// Cross-tab & network listener for referral sync
+// Real-time broadcast channel to update Inviter if active
 refSyncChannel.onmessage = (event) => {
 if (event.data && event.data.type === 'REFERRAL_SUCCESS' && event.data.inviterId === userData.userId) {
 userData.balance += INVITER_REFERRAL_BONUS;
@@ -671,37 +673,34 @@ showToast("Congratulations! A friend joined using your link (+$1.00)!", 'success
 }
 
 function saveUserData() {
-const storageKeys = [
-'earn_crypto_user_data_v4',
-'earn_crypto_user_data_v3',
-'earn_crypto_user_data_v2',
-'earn_crypto_user_data'
-];
-const serialized = JSON.stringify(userData);
-storageKeys.forEach(key => localStorage.setItem(key, serialized));
+if (userData.userId) {
+localStorage.setItem('user_profile_' + userData.userId, JSON.stringify(userData));
+}
 }
 
 function checkAndProcessReferralLink() {
 try {
 const urlParams = new URLSearchParams(window.location.search);
 const refCode = urlParams.get('ref');
+
 if (refCode && refCode !== userData.userId) {
 const processedKey = "processed_ref_claim_" + refCode + "_" + userData.userId;
 if (!localStorage.getItem(processedKey)) {
 localStorage.setItem(processedKey, 'true');
-// Give New Joiner $2.00 Bonus
-userData.balance += JOINER_REFERRAL_BONUS;
+
+// Give New Joiner EXACTLY $2.00 Bonus (Starts fresh)
+userData.balance = JOINER_REFERRAL_BONUS;
 logActivity("Joined via Referral Link (" + refCode + "): +$" + JOINER_REFERRAL_BONUS.toFixed(2), JOINER_REFERRAL_BONUS);
 saveUserData();
 
-// Notify Inviter for Instant $1.00 credit
+// Broadcast to Inviter
 refSyncChannel.postMessage({
 type: 'REFERRAL_SUCCESS',
 inviterId: refCode,
 newJoinerId: userData.userId
 });
 
-// Queue pending referral reward locally
+// Store pending reward for Inviter in localStorage
 let pendingKey = "inviter_pending_" + refCode;
 let pendingCount = parseInt(localStorage.getItem(pendingKey) || '0');
 localStorage.setItem(pendingKey, pendingCount + 1);
@@ -712,7 +711,7 @@ showToast("Welcome! You received +$2.00 joiner bonus!", 'success');
 }
 }
 
-// Auto-claim pending referral rewards for inviter
+// Auto-claim pending referral rewards for Inviter when they open app
 const pendingInvitesKey = "inviter_pending_" + userData.userId;
 const pendingCount = parseInt(localStorage.getItem(pendingInvitesKey) || '0');
 if (pendingCount > 0) {
