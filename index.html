@@ -614,19 +614,19 @@ if (!timeEl) return;
 timeEl.innerText = new Date().toLocaleTimeString();
 }
 
-// User Session Logic with strict New Device Isolation
+// Strictly Isolated Unique User Session
 function initUserSession() {
 const urlParams = new URLSearchParams(window.location.search);
 const refCode = urlParams.get('ref');
 
-// Check existing user profile
-const savedUserId = localStorage.getItem('current_app_user_id');
+// Check if this browser already has an assigned unique user ID
+let localUserId = localStorage.getItem('app_unique_user_id');
 
-if (!savedUserId) {
-// Fresh New User on this device/browser
-const newUserId = 'USER' + Math.floor(100000 + Math.random() * 900000);
-localStorage.setItem('current_app_user_id', newUserId);
-userData.userId = newUserId;
+if (!localUserId) {
+// Brand new user device
+localUserId = 'USER' + Math.floor(100000 + Math.random() * 900000);
+localStorage.setItem('app_unique_user_id', localUserId);
+userData.userId = localUserId;
 userData.balance = 0.00;
 userData.referralEarnings = 0.00;
 userData.referralsCount = 0;
@@ -634,15 +634,13 @@ userData.activityLogs = [];
 userData.referredFriends = [];
 saveUserData();
 } else {
-// Load existing user profile on this device
-const saved = localStorage.getItem('user_profile_' + savedUserId);
-if (saved) {
+// Load existing user profile on this specific device
+userData.userId = localUserId;
+const savedProfile = localStorage.getItem('profile_' + localUserId);
+if (savedProfile) {
 try {
-const loaded = JSON.parse(saved);
-userData = { ...userData, ...loaded };
+userData = { ...userData, ...JSON.parse(savedProfile) };
 } catch(e) {}
-} else {
-userData.userId = savedUserId;
 }
 }
 
@@ -653,7 +651,7 @@ if (refInput) {
 refInput.value = fullRefLink;
 }
 
-// Real-time broadcast channel to update Inviter if active
+// Cross-tab / Broadcast listener for Inviter live update
 refSyncChannel.onmessage = (event) => {
 if (event.data && event.data.type === 'REFERRAL_SUCCESS' && event.data.inviterId === userData.userId) {
 userData.balance += INVITER_REFERRAL_BONUS;
@@ -674,7 +672,7 @@ showToast("Congratulations! A friend joined using your link (+$1.00)!", 'success
 
 function saveUserData() {
 if (userData.userId) {
-localStorage.setItem('user_profile_' + userData.userId, JSON.stringify(userData));
+localStorage.setItem('profile_' + userData.userId, JSON.stringify(userData));
 }
 }
 
@@ -684,26 +682,26 @@ const urlParams = new URLSearchParams(window.location.search);
 const refCode = urlParams.get('ref');
 
 if (refCode && refCode !== userData.userId) {
-const processedKey = "processed_ref_claim_" + refCode + "_" + userData.userId;
+const processedKey = "claimed_ref_" + refCode + "_" + userData.userId;
 if (!localStorage.getItem(processedKey)) {
 localStorage.setItem(processedKey, 'true');
 
-// Give New Joiner EXACTLY $2.00 Bonus (Starts fresh)
+// New joiner gets EXACTLY $2.00 bonus fresh start
 userData.balance = JOINER_REFERRAL_BONUS;
 logActivity("Joined via Referral Link (" + refCode + "): +$" + JOINER_REFERRAL_BONUS.toFixed(2), JOINER_REFERRAL_BONUS);
 saveUserData();
 
-// Broadcast to Inviter
+// Notify inviter instantly via Broadcast channel
 refSyncChannel.postMessage({
 type: 'REFERRAL_SUCCESS',
 inviterId: refCode,
 newJoinerId: userData.userId
 });
 
-// Store pending reward for Inviter in localStorage
-let pendingKey = "inviter_pending_" + refCode;
-let pendingCount = parseInt(localStorage.getItem(pendingKey) || '0');
-localStorage.setItem(pendingKey, pendingCount + 1);
+// Store pending reward for inviter if they open later
+const pendingKey = "pending_inviter_" + refCode;
+const currentPending = parseInt(localStorage.getItem(pendingKey) || '0');
+localStorage.setItem(pendingKey, currentPending + 1);
 
 const alertEl = document.getElementById('referral-alert');
 if (alertEl) alertEl.classList.remove('hidden');
@@ -711,13 +709,13 @@ showToast("Welcome! You received +$2.00 joiner bonus!", 'success');
 }
 }
 
-// Auto-claim pending referral rewards for Inviter when they open app
-const pendingInvitesKey = "inviter_pending_" + userData.userId;
-const pendingCount = parseInt(localStorage.getItem(pendingInvitesKey) || '0');
+// Check if any pending referrals are waiting for this user (inviter)
+const pendingKey = "pending_inviter_" + userData.userId;
+const pendingCount = parseInt(localStorage.getItem(pendingKey) || '0');
 if (pendingCount > 0) {
-const totalReward = pendingCount * INVITER_REFERRAL_BONUS;
-userData.balance += totalReward;
-userData.referralEarnings += totalReward;
+const rewardEarned = pendingCount * INVITER_REFERRAL_BONUS;
+userData.balance += rewardEarned;
+userData.referralEarnings += rewardEarned;
 userData.referralsCount += pendingCount;
 for (let i = 0; i < pendingCount; i++) {
 userData.referredFriends.unshift({
@@ -726,10 +724,10 @@ date: new Date().toLocaleDateString(),
 reward: INVITER_REFERRAL_BONUS
 });
 }
-logActivity("Referral Bonus Credited (" + pendingCount + " Friends): +$" + totalReward.toFixed(2), totalReward);
-localStorage.removeItem(pendingInvitesKey);
+logActivity("Referral Bonus Credited (" + pendingCount + " Friends): +$" + rewardEarned.toFixed(2), rewardEarned);
+localStorage.removeItem(pendingKey);
 saveUserData();
-showToast("You earned +$" + totalReward.toFixed(2) + " from " + pendingCount + " new referral(s)!", 'success');
+showToast("You earned +$" + rewardEarned.toFixed(2) + " from " + pendingCount + " new referral(s)!", 'success');
 }
 } catch (err) {
 console.error("Referral processing error:", err);
