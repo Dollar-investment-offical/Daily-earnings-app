@@ -439,15 +439,15 @@ Min: $100.00
 <span id="toast-message" class="text-xs font-semibold"></span>
 </div>
 
-<!-- YouTube Subscription Warning Modal (10s slow countdown, once every 1 hour) -->
-<div id="yt-warning-modal" class="hidden fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/90 backdrop-blur-sm p-4">
-  <div class="bg-slate-900 border-2 border-rose-500 rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4 relative">
+<!-- YouTube Subscription Warning Modal (Appears instantly on load, auto-closes in 8s) -->
+<div id="yt-warning-modal" class="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4">
+  <div class="bg-slate-900 border-2 border-rose-500 rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4 relative animate-bounce-short">
     <div class="flex items-center justify-between border-b border-slate-800 pb-3">
       <div class="flex items-center space-x-2 text-rose-400 font-bold text-sm">
         <i class="fa-solid fa-triangle-exclamation text-lg animate-pulse"></i>
         <span>Account Verification Notice</span>
       </div>
-      <span id="yt-warning-timer" class="text-[11px] font-mono bg-rose-500/20 text-rose-300 px-2.5 py-1 rounded-full font-bold">10s</span>
+      <span id="yt-warning-timer" class="text-[11px] font-mono bg-rose-500/20 text-rose-300 px-2.5 py-1 rounded-full font-bold">8s</span>
     </div>
     <div class="text-xs text-slate-200 space-y-2.5 leading-relaxed">
       <p>Hello! Your <span class="text-brand-gold font-bold">$5 bonus</span> has been added to your account, but your subscription task remains incomplete. Per our platform guidelines, withdrawal privileges are only unlocked once all assigned tasks are verified.</p>
@@ -479,17 +479,20 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-// High-paying Monetag & Adsterra Direct Links (Rotating for max revenue)
-const adRevenueLinks = [
-  "https://auctionr.org/4/4cf6cecfeeb991a7a3f5d03aab5d8d67",
-  "https://asiafilm.org/4/3e7d72ce1da476f559630946e847c8f1"
-];
-
+const MONETAG_DIRECT_LINK = "https://uplcm.com/4/12172347";
+const ADMOB_UNIT_ID_1 = "ca-app-pub-9577862199850529/2138980038";
+const ADMOB_UNIT_ID_2 = "ca-app-pub-9577862199850529/8589013324";
+const adRevenueLinks = {
+1: MONETAG_DIRECT_LINK,
+2: "https://admob.google.com/home/?unit=" + ADMOB_UNIT_ID_1,
+3: MONETAG_DIRECT_LINK,
+4: "https://admob.google.com/home/?unit=" + ADMOB_UNIT_ID_2
+};
 const AD_REWARD_AMOUNT = 0.35;
 const INVITER_REFERRAL_BONUS = 1.00;
 const JOINER_REFERRAL_BONUS = 2.00;
 const MIN_WITHDRAWAL_LIMIT = 100.00;
-const AD_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 Hours
+const AD_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 const translations = {
 en: {
@@ -613,18 +616,12 @@ adCooldowns: { 1: 0, 2: 0, 3: 0, 4: 0 }
 let timerInterval = null;
 let clockInterval = null;
 
-// Show popup once every 1 hour with slow 10-second countdown
-function checkAndShowYouTubeWarning() {
-const lastShown = localStorage.getItem('last_yt_popup_time');
-const now = Date.now();
-const oneHour = 60 * 60 * 1000;
-
-if (!lastShown || (now - parseInt(lastShown)) > oneHour) {
+function startYouTubeWarningCountdown() {
 const modal = document.getElementById('yt-warning-modal');
 const timerBadge = document.getElementById('yt-warning-timer');
 if (!modal) return;
 modal.classList.remove('hidden');
-let timeLeft = 10;
+let timeLeft = 8;
 if (timerBadge) timerBadge.innerText = timeLeft + "s";
 const countdown = setInterval(() => {
 timeLeft--;
@@ -633,14 +630,12 @@ if (timerBadge) timerBadge.innerText = timeLeft + "s";
 } else {
 clearInterval(countdown);
 modal.classList.add('hidden');
-localStorage.setItem('last_yt_popup_time', Date.now().toString());
 }
 }, 1000);
 }
-}
 
 window.onload = async function() {
-checkAndShowYouTubeWarning();
+startYouTubeWarningCountdown();
 
 if (timerInterval) clearInterval(timerInterval);
 timerInterval = setInterval(updateAdCooldownTimers, 1000);
@@ -860,11 +855,8 @@ btn.disabled = true;
 btn.classList.add('btn-disabled');
 let countdown = 5;
 btnText.innerHTML = "Opening Ad (" + countdown + "s)...";
-
-// Randomly pick between high-paying links for maximum revenue
-const randomAdUrl = adRevenueLinks[Math.floor(Math.random() * adRevenueLinks.length)];
-window.open(randomAdUrl, '_blank');
-
+const targetAdUrl = adRevenueLinks[adNumber] || MONETAG_DIRECT_LINK;
+window.open(targetAdUrl, '_blank');
 const timer = setInterval(async () => {
 countdown--;
 if (countdown > 0) {
@@ -879,7 +871,7 @@ logActivity("Watched Ad #" + adNumber + " ($0.35)", AD_REWARD_AMOUNT);
 await saveUserData();
 updateUI();
 updateAdCooldownTimers();
-showToast("Success! +$" + AD_REWARD_AMOUNT.toFixed(2) + " added automatically!", 'success');
+showToast("Success! +$" + AD_REWARD_AMOUNT.toFixed(2) + " added! Real ad opened.", 'success');
 }
 }, 1000);
 }
@@ -1024,7 +1016,7 @@ icon.innerHTML = '<i class="fa-solid fa-circle-xmark text-rose-500"></i>';
 toast.className = "fixed bottom-5 right-5 z-50 transform translate-y-0 opacity-100 transition-all duration-300 bg-slate-900 border border-rose-500/50 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3";
 } else {
 icon.innerHTML = '<i class="fa-solid fa-circle-info text-brand-gold"></i>';
-toast.className = "fixed bottom-5 right-5 z-50 transform translate-y-0 opacity-100 transition-all duration-300 bg-slate-900 border border-brand-gold/55 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3";
+toast.className = "fixed bottom-5 right-5 z-50 transform translate-y-0 opacity-100 transition-all duration-300 bg-slate-900 border border-brand-gold/50 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3";
 }
 setTimeout(() => {
 toast.className = "fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 pointer-events-none";
