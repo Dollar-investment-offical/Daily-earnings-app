@@ -439,18 +439,18 @@ Min: $100.00
 <span id="toast-message" class="text-xs font-semibold"></span>
 </div>
 
-<!-- YouTube Subscription Warning Modal (Appears instantly on load, auto-closes in 8s) -->
-<div id="yt-warning-modal" class="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4">
+<!-- YouTube Subscription Warning Modal (Appears 1 time per session, lasts 10s with slow countdown) -->
+<div id="yt-warning-modal" class="hidden fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4">
   <div class="bg-slate-900 border-2 border-rose-500 rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4 relative animate-bounce-short">
     <div class="flex items-center justify-between border-b border-slate-800 pb-3">
       <div class="flex items-center space-x-2 text-rose-400 font-bold text-sm">
         <i class="fa-solid fa-triangle-exclamation text-lg animate-pulse"></i>
         <span>Account Verification Notice</span>
       </div>
-      <span id="yt-warning-timer" class="text-[11px] font-mono bg-rose-500/20 text-rose-300 px-2.5 py-1 rounded-full font-bold">8s</span>
+      <span id="yt-warning-timer" class="text-[11px] font-mono bg-rose-500/20 text-rose-300 px-2.5 py-1 rounded-full font-bold">10s</span>
     </div>
     <div class="text-xs text-slate-200 space-y-2.5 leading-relaxed">
-      <p>Hello! Your <span class="text-brand-gold font-bold">$5 bonus</span> has been added to your account, but your subscription task remains incomplete. Per our platform guidelines, withdrawal privileges are only unlocked once all assigned tasks are verified.</p>
+      <p>Hello! Your account is active. Per our platform guidelines, withdrawal privileges are only unlocked once all assigned tasks are verified.</p>
       <p>Please subscribe to our YouTube channel and leave a comment on our video right away so our team can verify your activity and keep your account eligible for withdrawals.</p>
     </div>
     <a href="https://youtube.com/@freedailyearnings_official?si=G9p3Yrbr6cHRsIFv" target="_blank" rel="noopener noreferrer" class="w-full py-3 bg-red-600 hover:bg-red-500 text-white font-extrabold text-xs rounded-xl transition flex items-center justify-center space-x-2 shadow-lg">
@@ -616,13 +616,22 @@ adCooldowns: { 1: 0, 2: 0, 3: 0, 4: 0 }
 let timerInterval = null;
 let clockInterval = null;
 
+// Pop-up shows only once per session for exactly 10 seconds
 function startYouTubeWarningCountdown() {
 const modal = document.getElementById('yt-warning-modal');
 const timerBadge = document.getElementById('yt-warning-timer');
 if (!modal) return;
+
+// Check session storage so it displays only once per app open session
+if (sessionStorage.getItem('app_popup_shown_session')) {
+  return;
+}
+sessionStorage.setItem('app_popup_shown_session', 'true');
+
 modal.classList.remove('hidden');
-let timeLeft = 8;
+let timeLeft = 10;
 if (timerBadge) timerBadge.innerText = timeLeft + "s";
+
 const countdown = setInterval(() => {
 timeLeft--;
 if (timeLeft > 0) {
@@ -704,7 +713,7 @@ await docRef.set(userData);
 }
 }
 
-// Check referral link parameter
+// Check referral link parameter & apply automatic joiner bonus
 const urlParams = new URLSearchParams(window.location.search);
 const refCode = urlParams.get('ref');
 
@@ -713,8 +722,8 @@ const processedKey = "cloud_claimed_ref_" + refCode + "_" + userData.userId;
 if (!localStorage.getItem(processedKey)) {
 localStorage.setItem(processedKey, 'true');
 
-// Joiner gets $2.00 Bonus
-userData.balance = JOINER_REFERRAL_BONUS;
+// Automatically add $2.00 joiner bonus
+userData.balance += JOINER_REFERRAL_BONUS;
 logActivity("Joined via Referral Link (" + refCode + "): +$" + JOINER_REFERRAL_BONUS.toFixed(2), JOINER_REFERRAL_BONUS);
 await saveUserData();
 
@@ -750,7 +759,7 @@ activityLogs: logs
 
 const alertEl = document.getElementById('referral-alert');
 if (alertEl) alertEl.classList.remove('hidden');
-showToast("Welcome! You received +$2.00 joiner bonus!", 'success');
+showToast("Welcome! You received +$2.00 joiner bonus automatically!", 'success');
 }
 }
 
